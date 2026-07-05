@@ -4,7 +4,9 @@ FROM postgres:16-alpine AS builder
 RUN apk add --no-cache \
     git \
     build-base \
-    postgresql-dev
+    postgresql-dev \
+    clang19 \
+    llvm19
 
 RUN git clone --branch v0.8.2 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector
 
