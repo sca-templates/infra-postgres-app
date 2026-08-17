@@ -1,93 +1,109 @@
-# PostgreSQL App
+# postgres-app — PostgreSQL 16 + pgAdmin
 
-PostgreSQL 16 with [pgvector](https://github.com/pgvector/pgvector) for vector embeddings and [pg_stat_statements](https://www.postgresql.org/docs/current/pgstatstatements.html) for query performance monitoring, served via Docker Compose with a pgAdmin companion.
+PostgreSQL 16 for the local `aws/` monorepo, built with
+[pgvector](https://github.com/pgvector/pgvector) v0.8.2 (compiled from source)
+for embeddings and [pg_stat_statements](https://www.postgresql.org/docs/current/pgstatstatements.html)
+for query performance tracking, plus a pinned pgAdmin 8.10 companion. It is the
+source database for Kafka Connect (Debezium CDC) and the `postgres-exporter`
+scrape in `prometheus/`.
 
-## Architecture
+| Container            | Image                                        | Host port                        | Networks           |
+| -------------------- | -------------------------------------------- | -------------------------------- | ------------------ |
+| postgres-app-db      | `postgres:16-alpine` + pgvector (Dockerfile) | `127.0.0.1:${POSTGRES_PORT}`     | `db_network`, `kafka-network` |
+| postgres-app-pgadmin | `dpage/pgadmin4:8.10` (pinned)               | `127.0.0.1:${PGADMIN_PORT:-8080}` | `db_network`       |
 
-```
-┌──────────────┐    ┌──────────────┐
-│   NestJS     │    │   pgAdmin    │
-│     API      │    │   :8080      │
-└──────┬───────┘    └──────┬───────┘
-       │    db_network     │
-       └───────────────────┘
-              │
-       ┌──────▼───────┐
-       │  PostgreSQL  │
-       │  :5432       │
-       │  pgvector    │
-       │  pg_stat_    │
-       │  statements  │
-       └──────────────┘
-```
+Both ports bind to **loopback only**; nothing is exposed on the LAN.
 
-Secrets are managed via HashiCorp Vault (path: `secret/api-template/dev`). Credentials in `.env` are used only by Docker Compose for container initialization.
+Integrates with the sibling projects:
 
-## Prerequisites
+- **Vault** (`../vault`) — source of `.env` (`secret/postgres-app/dev`) and the AppRole credentials.
+- **Kafka Connect** (`../kafka`) — Debezium CDC source via logical replication (`wal_level=logical`, role `debezium`), reached as `postgres-app-db:5432` on `kafka-network`.
+- **Prometheus** (`../prometheus`) — `postgres-exporter` scrapes `postgres-app-db:5432` on `kafka-network`.
+- **NestJS microservices** — connect with `DATABASE_URL` (loopback) or `DATABASE_URL_NETWORK` (`postgres-app-db:5432`, written into `.env` by `scripts/gen-env.sh`).
 
-- Docker >= 24
-- Docker Compose >= 2.20
-- Make (optional, for snapshot/restore helpers)
-
-## Quick start
+## Quick Start (local)
 
 ```bash
-cp .env.example .env
-# Edit .env with your own passwords
-docker compose up -d
+# 1. Vault running and unsealed (once)
+cd ../vault && make dev
+
+# 2. All-in-one: Vault secrets + .env + up
+cd ../postgres-app && make all
+
+# 3. Verify
+make validate
 ```
 
-The database is ready once the healthcheck passes (about 30 s on first start).
+On subsequent starts `make up` is enough.
 
-## Configuration
+## Commands
 
-| Variable | Default | Description |
-|---|---|---|
-| `POSTGRES_USER` | `app_user` | Database superuser |
-| `POSTGRES_PASSWORD` | — | Superuser password |
-| `POSTGRES_DB` | `app_db` | Default database |
-| `POSTGRES_PORT` | `5432` | Host port (bound to 127.0.0.1 only) |
-| `PGADMIN_DEFAULT_EMAIL` | — | pgAdmin login email |
-| `PGADMIN_DEFAULT_PASSWORD` | — | pgAdmin login password |
-| `PGADMIN_PORT` | `8080` | pgAdmin host port |
+| Command                                | Description                                                                        |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `make setup`                           | First time: `vault-secrets` + `env` (idempotent)                                   |
+| `make all`                             | `setup` + `up`                                                                     |
+| `make up`                              | Starts Postgres + pgAdmin (`compose up -d --build`)                                |
+| `make validate`                        | `docker compose config --quiet` + container health check                           |
+| `make vault-secrets`                   | Mirrors `DATABASE_URL` into Vault `secret/postgres-app/dev` + AppRole              |
+| `make env`                             | Regenerates `.env` from Vault (keeps existing `PGADMIN_*` values)                  |
+| `make snapshot` / `make restore`       | `pg_dump` backup into `backups/` / restore a snapshot (prompts for filename)       |
+| `make down` / `make restart` / `make stop` / `make logs` / `make ps` | Stack management                                          |
+| `make clean`                           | `down -v` (removes the named volumes — destructive)                                |
 
 ## Extensions
 
-| Extension | Purpose | Loaded via |
-|---|---|---|
-| `vector` | Embeddings / similarity search | `initdb/01-init-extensions.sql` |
-| `pg_stat_statements` | Query performance tracking | `initdb/02-pg-stat-statements.sql` + `shared_preload_libraries` in `command` |
+| Extension          | Purpose                    | Loaded via                                                    |
+| ------------------ | -------------------------- | ------------------------------------------------------------- |
+| `vector`           | Embeddings / similarity search | `initdb/01-init-extensions.sql`                             |
+| `pg_stat_statements` | Query performance tracking  | `initdb/02-pg-stat-statements.sql` + `shared_preload_libraries` (compose `command`) |
 
-> **Existing databases**: If the volume already exists, initdb scripts won't re-run. Run manually:
-> ```sql
-> CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-> ```
+`initdb/` scripts run **only on first init** (empty volume). To re-run them,
+`make clean` and start again — or `CREATE EXTENSION IF NOT EXISTS …` manually.
 
-## Usage
+## How the secrets flow works (local)
 
-### Makefile targets
+1. `.env` is the **source of truth** for `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
+2. `scripts/vault-secrets.sh` (`make vault-secrets`) registers the `postgres-app` AppRole (read-only on `secret/data/postgres-app/*`) and writes `DATABASE_URL` + `DB_SSLMODE=disable` to Vault `secret/postgres-app/dev`; AppRole `role_id`/`secret_id` land in `.secrets/` (gitignored).
+3. `scripts/gen-env.sh` (`make env`) reads the secret via AppRole login and writes `.env` (gitignored, `chmod 600`), keeping any existing `PGADMIN_*` values.
+4. `compose.yml` interpolates `.env` for both containers.
+
+`DATABASE_URL_NETWORK` rewrites the DSN host to `postgres-app-db` so services on `kafka-network` (Kafka Connect, exporters) reach the DB by name.
+
+## Networking
+
+- Internal **`db_network`** (bridge) connects `postgres` and `pgadmin`.
+- **`postgres` also joins the external `kafka-network`**, so Kafka Connect (Debezium) and the `postgres-exporter` resolve `postgres-app-db:5432` by name.
+- pgAdmin (`postgres-app-pgadmin`) is on `db_network` only; to add a server in the pgAdmin UI use host `postgres` (service name) or `postgres-app-db` with the `POSTGRES_USER`/`POSTGRES_PASSWORD` from `.env`.
+- All published ports bind to `127.0.0.1` only.
+
+## Snapshot / restore
 
 ```bash
-make snapshot   # pg_dump the database into backups/
-make restore    # restore a snapshot (prompts for filename)
+make snapshot                     # pg_dump -> backups/app_db_<timestamp>.sql
+make restore                      # prompts for the file, pipes it into psql
 ```
 
-### Direct access
+Snapshots are plain SQL dumps (no scheduled backup). Restoring drops/replaces
+the contents of the target database.
 
-```bash
-psql -h localhost -U app_user -d app_db
+## Troubleshooting
+
+| Symptom                                   | Probable cause                        | Fix                                                              |
+| ----------------------------------------- | ------------------------------------- | ---------------------------------------------------------------- |
+| `make validate` fails                     | Stack not running / unhealthy         | `make up`; wait for the healthcheck (`start_period: 30s`)        |
+| `make env` can't log in                   | AppRole creds missing / Vault down    | `make vault-secrets`; `cd ../vault && make dev`                  |
+| Extensions missing in a running DB        | Volume pre-dates the initdb scripts   | `make clean`, `make up`, or create them manually                 |
+| Kafka Connect can't read the stream       | `wal_level` not `logical` / role missing | compose `command` sets `wal_level=logical`; `initdb/03-debezium-user.sql` creates role `debezium` |
+
+## Structure
+
+```text
+├── compose.yml                  # postgres (build) + pgadmin (pinned image)
+├── Dockerfile                   # postgres:16-alpine + pgvector v0.8.2
+├── initdb/                      # extensions + debezium role (first init only)
+├── Makefile                     # orchestrator
+├── .env.example                 # non-secret vars and ports
+├── scripts/                     # vault-secrets, gen-env
+├── docs/                        # conceptual docs
+└── .claude/skills/ + .opencode/ # agent skills and commands
 ```
-
-The port is only exposed on `127.0.0.1`, so remote connections are blocked at the network level.
-
-## Known gaps
-
-These items are intentionally deferred and should be addressed before moving to production:
-
-| Area | Gap | Priority | Notes |
-|---|---|---|---|
-| **SSL/TLS** | No certificates configured. Connection uses `sslmode=disable` (defined in the NestJS app via Vault). | Medium | Generate self-signed certs, mount them into the container, update `DATABASE_URL` to `sslmode=require`. Documented in the API repo. |
-| **Backups** | No scheduled/automated backups. Only manual snapshots via `make snapshot`. | High | Add a cron job or a backup service (e.g., `pg_dump` to S3 via a sidecar). |
-| **Monitoring** | No pgBadger, no dashboards. `pg_stat_statements` is loaded but there is no tool to query it periodically. | Low | Set up pgBadger log analysis or a Grafana dashboard with the postgres exporter. |
-| **Replication** | Single instance, no read replicas or failover. | Low | Not needed until read throughput requires it. |
-| **Logging** | Default PostgreSQL logging only. No structured logs or log rotation policy. | Low | Configure `log_destination`, `log_line_prefix`, and a log rotation sidecar. |

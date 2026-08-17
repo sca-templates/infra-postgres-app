@@ -1,0 +1,156 @@
+{
+  // =========================
+  // FONT
+  // =========================
+  "editor.fontFamily": "Fira Code",
+  "editor.fontLigatures": true,
+  "editor.fontSize": 14,
+
+  // =========================
+  // EDITOR
+  // =========================
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.wordWrap": "off",
+  "editor.minimap.enabled": false,
+  "editor.renderWhitespace": "boundary",
+  "breadcrumbs.enabled": true,
+  "problems.showCurrentInStatus": true,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.autoSave": "onFocusChange",
+  "workbench.iconTheme": "material-icon-theme",
+
+  // =========================
+  // MARKDOWN
+  // =========================
+  "[markdown]": {
+    "editor.defaultFormatter": "yzhang.markdown-all-in-one",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.wordWrap": "on",
+    "files.trimTrailingWhitespace": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.markdownlint": "explicit"
+    }
+  },
+  "markdown.extension.tableFormatter.enabled": true,
+  "markdown.extension.orderedList.marker": "one",
+  "markdown.extension.preview.autoShowPreviewToSide": false,
+
+  // =========================
+  // YAML
+  // =========================
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml",
+    "editor.tabSize": 2,
+    "editor.formatOnSave": true
+  },
+  "yaml.format.enable": true,
+  "yaml.validate": true,
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema.json": "compose.yml"
+  },
+
+  // =========================
+  // JSON / JSONC / SHELL / SQL
+  // =========================
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[shellscript]": {
+    "editor.tabSize": 2
+  },
+  "[sql]": {
+    "editor.tabSize": 2
+  },
+
+  // =========================
+  // SPELL CHECKER
+  // =========================
+  "cSpell.language": "en",
+  "cSpell.enabled": true,
+  "cSpell.words": [
+    "sca",
+    "NestJS",
+    "nestjs",
+    "gRPC",
+    "Kafka",
+    "MinIO",
+    "MailHog",
+    "Consul",
+    "Vault",
+    "Postgres",
+    "PostgreSQL",
+    "pgvector",
+    "pgAdmin",
+    "Grafana",
+    "Prometheus",
+    "Debezium",
+    "debezium",
+    "AppRole",
+    "approles",
+    "roleid",
+    "secretid",
+    "pg_stat_statements",
+    "pg_dump",
+    "pg_isready",
+    "psql",
+    "initdb",
+    "wal_level",
+    "shared_preload_libraries",
+    "sslmode",
+    "DATABASE_URL",
+    "DATABASE_URL_NETWORK",
+    "DB_SSLMODE",
+    "app_user",
+    "app_db",
+    "kafka-network",
+    "db_network",
+    "postgres-app-db",
+    "postgres-app-pgadmin",
+    "postgres_data",
+    "pgadmin_data",
+    "host-gateway",
+    "postgres-exporter",
+    "docker-entrypoint-initdb.d",
+    "markdownlint",
+    "shellcheck"
+  ],
+
+  // =========================
+  // EXPLORER / SEARCH
+  // =========================
+  "search.exclude": {
+    ".secrets": true,
+    "data": true,
+    "backups": true
+  },
+  "files.watcherExclude": {
+    ".secrets": true,
+    ".git": true
+  },
+  "material-icon-theme.folders.associations": {
+    "scripts": "tools",
+    "data": "database",
+    "initdb": "database",
+    "backups": "database",
+    "handbook": "docs",
+    "opencode": "opencode",
+    "claude": "claude",
+    "skills": "skills"
+  },
+
+  // =========================
+  // GIT / EXPLORER
+  // =========================
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "explorer.confirmDelete": false,
+  "explorer.confirmDragAndDrop": false
+}

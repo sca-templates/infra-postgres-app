@@ -12,6 +12,7 @@ services:
     command: >
       -c shared_preload_libraries=pg_stat_statements
       -c pg_stat_statements.track=all
+      -c wal_level=logical
     ports:
       - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes:
@@ -29,6 +30,7 @@ services:
       start_period: 30s
     networks:
       - db_network
+      - kafka-network
     deploy:
       resources:
         limits:
@@ -36,7 +38,7 @@ services:
           memory: 512M
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:8.10
     container_name: postgres-app-pgadmin
     restart: unless-stopped
     environment:
@@ -44,7 +46,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "${PGADMIN_PORT}:80"
+      - "127.0.0.1:${PGADMIN_PORT}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -56,6 +58,9 @@ services:
 networks:
   db_network:
     driver: bridge
+  kafka-network:
+    external: true
+    name: kafka-network
 
 volumes:
   postgres_data:

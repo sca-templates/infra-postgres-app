@@ -1,0 +1,76 @@
+# =============================================================================
+# postgres-app Validate Pipeline — PRs and pushes to main
+# Static validation of configs and docs without needing the running stack
+# =============================================================================
+
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  config:
+    name: Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./scripts"
+
+      - name: Validate docker-compose
+        run: |
+          cp .env.example .env
+          docker compose -f compose.yml config --quiet
+
+      - name: Check .env.example has all required keys
+        run: |
+          REQUIRED_KEYS=(
+            POSTGRES_USER
+            POSTGRES_PASSWORD
+            POSTGRES_DB
+            POSTGRES_PORT
+            PGADMIN_DEFAULT_EMAIL
+            PGADMIN_DEFAULT_PASSWORD
+            PGADMIN_PORT
+          )
+          for key in "${REQUIRED_KEYS[@]}"; do
+            grep -q "^${key}=" .env.example \
+              && echo "[OK] ${key}" \
+              || (echo "[FAIL] Missing key: ${key}" && exit 1)
+          done
+
+  markdown:
+    name: Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: markdownlint
+        run: npx --yes markdownlint-cli2 README.md AGENTS.md CLAUDE.md .github/PULL_REQUEST_TEMPLATE.md .github/CONTRIBUTING.md docs/**/*.md .claude/skills/**/SKILL.md .opencode/command/*.md
+
+      - name: Check links
+        run: |
+          for f in README.md .github/PULL_REQUEST_TEMPLATE.md .github/CONTRIBUTING.md; do
+            npx --yes markdown-link-check \
+              -c .github/markdown-link-check.json \
+              "$f"
+          done
